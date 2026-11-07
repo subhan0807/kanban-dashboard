@@ -1,77 +1,74 @@
-# React + TypeScript + Vite
+# GUVI Project-02: Kanban Task Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An automated CI/CD deployment project demonstrating how to build, containerize and deploy a React application using **GitHub, Jenkins, Docker, Docker Hub and AWS EC2**.
 
-Currently, two official plugins are available:
+## Live Application
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**Application URL:** http://52.66.248.241/
 
-## React Compiler
+## Technology Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+* React, TypeScript and Vite
+* Git and GitHub
+* Jenkins CI/CD
+* Docker and Docker Hub
+* AWS EC2 (Ubuntu)
+* Nginx Reverse Proxy
+* Blue-Green Deployment
 
-## Expanding the ESLint configuration
+## CI/CD Workflow
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+GitHub → GitHub Webhook → Jenkins → Build and Test → Docker Build → Docker Hub → AWS EC2 → Blue-Green Deployment → Health Check
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Every GitHub push automatically triggers the Jenkins pipeline.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Key Features
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+* Automated CI/CD pipeline using Jenkins.
+* Multi-stage Docker build with an unprivileged Nginx runtime.
+* Versioned Docker images published to Docker Hub.
+* Automated Blue-Green deployment.
+* Docker health checks and application validation.
+* Container resource limits.
+* Previous deployment slot retained for rollback.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Blue-Green Deployment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Two application containers are maintained:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-## CI/CD Automation
+| Slot  | Container    | Port |
+| ----- | ------------ | ---- |
+| Blue  | kanban-blue  | 8081 |
+| Green | kanban-green | 8082 |
+
+Nginx routes incoming application traffic to the active healthy container.
+
+Deployment script: [deploy-kanban-bluegreen.sh](scripts/deploy-kanban-bluegreen.sh)
+
+## Project Documentation
+
+For complete implementation details, AWS architecture, Jenkins pipeline stages, Docker configuration, deployment workflow and verification commands, see:
+
+[PROJECT-02-DEPLOYMENT.md](PROJECT-02-DEPLOYMENT.md)
+
+## Project Links
+
+* **GitHub:** https://github.com/subhan0807/kanban-dashboard
+* **Docker Hub:** https://hub.docker.com/r/subhan0807/kanban-dashboard
+* **Application:** http://52.66.248.241/
+
+## Deployment Result
+
+* Jenkins Build #4: SUCCESS
+* Docker image deployed: `subhan0807/kanban-dashboard:4`
+* Active slot: Blue
+* Application response: HTTP 200 OK
+* Application health: healthy
+* Both Blue and Green containers running successfully.
+
+## Project Outcome
+
+Successfully implemented an automated end-to-end CI/CD pipeline from GitHub to AWS EC2 with Docker containerization and Blue-Green deployment.
 
 GitHub push events automatically trigger the Jenkins pipeline.
 Docker images are built, pushed to Docker Hub, and deployed on AWS EC2.
