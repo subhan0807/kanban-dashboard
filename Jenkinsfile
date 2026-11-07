@@ -11,6 +11,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                sh 'rm -f .deployment-started .previous-image'
                 checkout scm
             }
         }
@@ -65,6 +66,15 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
+                    set -eu
+
+                    PREVIOUS_IMAGE=$(docker inspect \
+                      --format='{{.Config.Image}}' \
+                      ${CONTAINER_NAME} 2>/dev/null || true)
+
+                    echo "$PREVIOUS_IMAGE" > .previous-image
+                    touch .deployment-started
+
                     docker pull ${DOCKER_IMAGE}:${IMAGE_TAG}
 
                     docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
@@ -84,7 +94,8 @@ pipeline {
             steps {
                 sh '''
                     for i in $(seq 1 15); do
-                        if curl -fsS http://127.0.0.1:${APP_PORT}/health; then
+                        if curl -fsS http://127.0.0.1:${APP_PORT}/health \
+                          >/dev/null; then
                             echo "Application health check passed"
                             exit 0
                         fi
@@ -96,6 +107,36 @@ pipeline {
                     exit 1
                 '''
             }
+        }
+    }
+
+    post {
+        failure {
+            sh '''
+                if [ -f .deployment-started ]; then
+                    echo "Deployment failed. Starting rollback..."
+
+                    PREVIOUS_IMAGE=$(cat .previous-image 2>/dev/null || true)
+
+                    docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
+
+                    if [ -n "$PREVIOUS_IMAGE" ]; then
+                        echo "Restoring previous image: $PREVIOUS_IMAGE"
+
+                        docker run -d \
+                          --name ${CONTAINER_NAME} \
+                          --restart unless-stopped \
+                          --memory=512m \
+                          --cpus=0.5 \
+                          -p ${APP_PORT}:${CONTAINER_PORT} \
+                          "$PREVIOUS_IMAGE"
+
+                        echo "Rollback container started"
+                    else
+                        echo "No previous image available for rollback"
+                    fi
+                fi
+            '''
         }
     }
 }
