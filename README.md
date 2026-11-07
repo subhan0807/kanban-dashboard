@@ -71,3 +71,7 @@ export default defineConfig([
   },
 ])
 ```
+## CI/CD Automation
+
+GitHub push events automatically trigger the Jenkins pipeline.
+Docker images are built, pushed to Docker Hub, and deployed on AWS EC2.
