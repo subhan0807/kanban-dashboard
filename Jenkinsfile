@@ -1,17 +1,15 @@
+
 pipeline {
     agent any
 
     environment {
         DOCKER_IMAGE = 'subhan0807/kanban-dashboard'
-        CONTAINER_NAME = 'kanban-dashboard'
-        APP_PORT = '80'
-        CONTAINER_PORT = '8080'
+        APP_URL = 'http://127.0.0.1'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                sh 'rm -f .deployment-started .previous-image'
                 checkout scm
             }
         }
@@ -35,6 +33,7 @@ pipeline {
             steps {
                 script {
                     env.IMAGE_TAG = "${BUILD_NUMBER}"
+
                     sh '''
                         docker build \
                           -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
@@ -53,39 +52,23 @@ pipeline {
                 )]) {
                     sh '''
                         set +x
+                        export DOCKER_CONFIG=$(mktemp -d)
+                        trap 'docker logout >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+
                         echo "$DOCKER_TOKEN" | docker login \
                           -u "$DOCKER_USER" --password-stdin
+
                         docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
                         docker push ${DOCKER_IMAGE}:latest
-                        docker logout
                     '''
                 }
             }
         }
 
-        stage('Deploy') {
+        stage('Blue-Green Deploy') {
             steps {
                 sh '''
-                    set -eu
-
-                    PREVIOUS_IMAGE=$(docker inspect \
-                      --format='{{.Config.Image}}' \
-                      ${CONTAINER_NAME} 2>/dev/null || true)
-
-                    echo "$PREVIOUS_IMAGE" > .previous-image
-                    touch .deployment-started
-
-                    docker pull ${DOCKER_IMAGE}:${IMAGE_TAG}
-
-                    docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
-
-                    docker run -d \
-                      --name ${CONTAINER_NAME} \
-                      --restart unless-stopped \
-                      --memory=512m \
-                      --cpus=0.5 \
-                      -p ${APP_PORT}:${CONTAINER_PORT} \
-                      ${DOCKER_IMAGE}:${IMAGE_TAG}
+                    sudo -n /usr/local/bin/deploy-kanban-bluegreen "$IMAGE_TAG"
                 '''
             }
         }
@@ -93,17 +76,17 @@ pipeline {
         stage('Health Check') {
             steps {
                 sh '''
+                    echo "Checking application through Nginx..."
+
                     for i in $(seq 1 15); do
-                        if curl -fsS http://127.0.0.1:${APP_PORT}/health \
-                          >/dev/null; then
-                            echo "Application health check passed"
+                        if curl -fsS ${APP_URL}/health; then
+                            echo "Blue-Green deployment successful"
                             exit 0
                         fi
                         sleep 2
                     done
 
-                    echo "Health check failed"
-                    docker logs ${CONTAINER_NAME}
+                    echo "Application health check failed"
                     exit 1
                 '''
             }
@@ -111,31 +94,17 @@ pipeline {
     }
 
     post {
+        success {
+            echo 'Pipeline completed successfully.'
+            echo 'Blue-Green deployment is complete.'
+        }
+
         failure {
             sh '''
-                if [ -f .deployment-started ]; then
-                    echo "Deployment failed. Starting rollback..."
-
-                    PREVIOUS_IMAGE=$(cat .previous-image 2>/dev/null || true)
-
-                    docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
-
-                    if [ -n "$PREVIOUS_IMAGE" ]; then
-                        echo "Restoring previous image: $PREVIOUS_IMAGE"
-
-                        docker run -d \
-                          --name ${CONTAINER_NAME} \
-                          --restart unless-stopped \
-                          --memory=512m \
-                          --cpus=0.5 \
-                          -p ${APP_PORT}:${CONTAINER_PORT} \
-                          "$PREVIOUS_IMAGE"
-
-                        echo "Rollback container started"
-                    else
-                        echo "No previous image available for rollback"
-                    fi
-                fi
+                echo "Pipeline failed. Checking deployment containers..."
+                docker ps -a
+                docker logs kanban-blue 2>/dev/null || true
+                docker logs kanban-green 2>/dev/null || true
             '''
         }
     }
